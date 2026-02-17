@@ -1,4 +1,6 @@
-# Context-Aware Document Processing Pipeline (Stages 0–5)
+# DocuChat
+
+> > This is my Capstone Project: "Reducing Hallucination in Retrieval-Augmented Generation Using Hybrid Vector–Graph Integration with Evidence Grounding"
 
 This repository implements a deterministic, restart-safe document processing pipeline designed to prepare unstructured documents for Retrieval-Augmented Generation (RAG), semantic search, and downstream AI applications.
 
@@ -30,7 +32,7 @@ Each stage produces deterministic outputs, enabling restart safety, append-only 
 
 ---
 
-# Stage 0 — Storage and Job Foundation
+# Stage 0 - Storage and Job Foundation
 
 Stage 0 establishes the storage structure and job tracking system.
 
@@ -46,7 +48,7 @@ This stage provides the backbone for all subsequent processing.
 
 ---
 
-# Stage 1 — File Registration
+# Stage 1 - File Registration
 
 Documents are registered into the system and associated with a collection.
 
@@ -61,7 +63,7 @@ This stage ensures every document is tracked consistently.
 
 ---
 
-# Stage 2 — Ingestion
+# Stage 2 - Ingestion
 
 Raw files are ingested into the pipeline and assigned a stable identity.
 
@@ -76,7 +78,7 @@ This stage establishes the permanent identity of each document.
 
 ---
 
-# Stage 3 — Extraction
+# Stage 3 - Extraction
 
 Document contents are extracted into structured text form while preserving reading order.
 
@@ -96,7 +98,7 @@ This stage converts binary files into structured textual representations.
 
 ---
 
-# Stage 4 — Cleaning
+# Stage 4 - Cleaning
 
 Extracted text is normalized and prepared for downstream semantic processing.
 
@@ -113,7 +115,7 @@ This ensures embedding quality while preserving source fidelity.
 
 ---
 
-# Stage 5 — Semantic Chunking
+# Stage 5 - Semantic Chunking
 
 Documents are divided into meaningful semantic units suitable for embedding and retrieval.
 
@@ -172,20 +174,20 @@ No manual recovery steps are required.
 
 Stages completed:
 
-* Stage 0 — Storage and Job Foundation
-* Stage 1 — File Registration
-* Stage 2 — Ingestion
-* Stage 3 — Extraction
-* Stage 4 — Cleaning
-* Stage 5 — Semantic Chunking
+* Stage 0 - Storage and Job Foundation
+* Stage 1 - File Registration
+* Stage 2 - Ingestion
+* Stage 3 - Extraction
+* Stage 4 - Cleaning
+* Stage 5 - Semantic Chunking
 
 Yed to do:
 
-* Stage 6 — Embedding
-* Stage 7 — Indexing
-* Stage 8 — Graph
-* Stage 9 — Retrieval + grounded generation
-* Stage 10 — Chat persistence
+* Stage 6 - Embedding
+* Stage 7 - Indexing
+* Stage 8 - Graph
+* Stage 9 - Retrieval + grounded generation
+* Stage 10 - Chat persistence
 
 ---
 
