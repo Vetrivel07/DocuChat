@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DocuChat</title>
+  <link rel="stylesheet" href="{{ request.url_for('static', path='css/style.css') }}">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-left">
+    <div class="logo-badge">DC</div>
+    <div class="brand"><span class="brand-1">Docu</span><span class="brand-2">Chat</span></div>
+  </div>
+  <div class="topbar-right">
+    <button class="nav-link" id="vanishBtn" type="button" title="Clear current workspace">Vanish</button>
+    <button class="icon-btn" id="openSidebarBtn">☰</button>
+  </div>
+</header>
+
+<aside class="sidebar" id="sidebar" aria-hidden="true">
+  <div class="sidebar-header">
+    <div class="sidebar-title">Account</div>
+    <button class="icon-btn" id="closeSidebarBtn">✕</button>
+  </div>
+  <div class="sidebar-body">
+    <div class="sidebar-card">
+      <div class="sidebar-label">Status</div>
+      <div class="sidebar-value">Not logged in</div>
+    </div>
+  </div>
+</aside>
+
+<div class="backdrop" id="backdrop" hidden></div>
+
+<main class="page">
+  <section class="hero" id="heroSection">
+    <h1>DocuChat: RAG-Powered Document Intelligence</h1>
+    <p class="subtitle">Turn your static files into an interactive knowledge base - just upload, ask, and uncover.</p>
+  </section>
+
+  <section class="panel">
+
+    <div id="uploadPanel">
+      <form id="uploadForm" class="rag-form" enctype="multipart/form-data">
+        <div class="grid">
+          <div class="field field-full">
+            <label for="files">Upload PDF / DOCX</label>
+            <input id="files" name="files" type="file" accept=".pdf,.docx" multiple required />
+          </div>
+          <div class="field field-full actions">
+            <button class="btn btn-primary" type="submit">Upload & Process</button>
+          </div>
+        </div>
+      </form>
+      <p class="subtitle" style="margin-top:14px;">
+        Health: <code>/health/live</code> · <code>/health/ready</code>
+      </p>
+    </div>
+
+    <div id="processingPanel" hidden>
+      <div id="stageLine" class="stage-line">⏳ Starting…</div>
+      <div class="pipeline-out" style="margin-top:10px;">
+        <div><strong>Job ID:</strong> <code id="jobIdOut">-</code></div>
+        <div><strong>Collection:</strong> <code id="collectionIdOut">-</code></div>
+        <div><strong>Documents:</strong> <code id="sourceNamesOut">-</code></div>
+        <div id="errorOut"></div>
+        <button id="retryBtn" class="btn" type="button" hidden>Retry</button>
+      </div>
+    </div>
+
+    <div id="chatPanel" hidden>
+      <div id="chatMeta" style="display:none;">
+        <code id="activeCollection">-</code>
+      </div>
+
+      <div class="chat-shell">
+        <div class="chat-top">
+          <div class="docs-bar-dark">
+            <div class="docs-title-dark">Documents</div>
+            <div id="docsList" class="docs-list-dark"></div>
+          </div>
+        </div>
+
+        <div id="chatLog" class="chat-body"></div>
+
+        <form id="chatForm" class="chat-composer">
+          <button type="button" class="composer-plus" id="addFilesBtn" title="Add files">+</button>
+          <input id="chatInput" class="composer-input" type="text"
+                 placeholder="Ask anything" autocomplete="off" required />
+          <button class="composer-send" type="submit">Send</button>
+        </form>
+
+        <input id="addFilesInput" type="file" accept=".pdf,.docx" multiple hidden />
+      </div>
+    </div>
+
+  </section>
+</main>
+
+<footer class="footer">
+  <div class="footer-bottom">
+    Copyright © {{ current_year }} DocuChat
+  </div>
+</footer>
+
+<script src="{{ request.url_for('static', path='js/script.js') }}"></script>
+</body>
+</html>
