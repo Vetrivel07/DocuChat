@@ -1,0 +1,30 @@
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Runtime state
+progress_record/
+storage/
+
+# Project notes / local docs
+structure.md
+
+# Logs
+*.log
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.cache
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Tooling
+.uv/
