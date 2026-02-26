@@ -7,6 +7,9 @@ env/
 progress_record/
 storage/
 
+# Local secrets
+.env
+
 # Project notes / local docs
 structure.md
 
