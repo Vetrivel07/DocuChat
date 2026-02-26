@@ -48,6 +48,138 @@ function clearActiveCollectionId(){
 }
 
 
+function escapeHtml(s) {
+  return (s || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+// ===== Citation tooltip portal (prevents clipping inside overflow containers) =====
+let citeTipEl = null;
+
+function ensureCiteTooltipEl() {
+  if (citeTipEl) return citeTipEl;
+  citeTipEl = document.createElement("div");
+  citeTipEl.className = "cite-tooltip-portal";
+  citeTipEl.setAttribute("role", "tooltip");
+  document.body.appendChild(citeTipEl);
+  return citeTipEl;
+}
+
+function clamp(n, min, max) {
+  return Math.max(min, Math.min(max, n));
+}
+
+function showCiteTooltip(anchorEl) {
+  const tip = (anchorEl?.getAttribute("data-tip") || "").trim();
+  if (!tip) return;
+
+  const el = ensureCiteTooltipEl();
+  el.textContent = tip;
+  el.classList.add("show");
+
+  const r = anchorEl.getBoundingClientRect();
+  const pad = 8;
+
+  el.style.left = "0px";
+  el.style.top = "0px";
+
+  const tw = el.offsetWidth;
+  const th = el.offsetHeight;
+
+  const spaceBelow = window.innerHeight - r.bottom;
+  const placeBelow = spaceBelow >= (th + 12);
+
+  const left = clamp(r.left, pad, window.innerWidth - tw - pad);
+  const top = placeBelow
+    ? clamp(r.bottom + 10, pad, window.innerHeight - th - pad)
+    : clamp(r.top - th - 10, pad, window.innerHeight - th - pad);
+
+  el.style.left = `${left}px`;
+  el.style.top = `${top}px`;
+}
+
+function hideCiteTooltip() {
+  if (!citeTipEl) return;
+  citeTipEl.classList.remove("show");
+}
+
+// Delegate tooltip behavior from chatLog (works for dynamically injected messages)
+const chatLogElForTips = document.getElementById("chatLog");
+if (chatLogElForTips) {
+  chatLogElForTips.addEventListener("mouseenter", (e) => {
+    const cite = e.target.closest?.(".cite");
+    if (!cite) return;
+    showCiteTooltip(cite);
+  }, true);
+
+  chatLogElForTips.addEventListener("mousemove", (e) => {
+    const cite = e.target.closest?.(".cite");
+    if (!cite) return;
+    showCiteTooltip(cite);
+  }, true);
+
+  chatLogElForTips.addEventListener("mouseleave", (e) => {
+    const cite = e.target.closest?.(".cite");
+    if (!cite) return;
+    hideCiteTooltip();
+  }, true);
+
+  chatLogElForTips.addEventListener("focusin", (e) => {
+    const cite = e.target.closest?.(".cite");
+    if (!cite) return;
+    showCiteTooltip(cite);
+  });
+
+  chatLogElForTips.addEventListener("focusout", (e) => {
+    const cite = e.target.closest?.(".cite");
+    if (!cite) return;
+    hideCiteTooltip();
+  });
+}
+
+window.addEventListener("scroll", hideCiteTooltip, true);
+window.addEventListener("resize", hideCiteTooltip);
+
+function buildCitationMap(sources) {
+  const map = {};
+  (sources || []).forEach((s) => {
+    if (typeof s.source_idx === "number") {
+      map[String(s.source_idx)] = s;
+    }
+  });
+  return map;
+}
+
+function renderAnswerWithCitations(answer, sources) {
+  const srcMap = buildCitationMap(sources);
+
+  // escape first to avoid XSS
+  let html = escapeHtml(answer || "");
+
+  // replace [1] [2] with spans
+  html = html.replace(/\[(\d{1,3})\]/g, (m, n) => {
+    const s = srcMap[n];
+    if (!s) return m;
+
+    const label = escapeHtml(s.source_name || s.doc_id || "source");
+    const page = (s.page_num !== undefined && s.page_num !== null) ? ` p.${s.page_num}` : "";
+    const tipText = (s.text || "").trim();
+    const tip = escapeHtml(tipText.length > 700 ? (tipText.slice(0, 700) + "…") : tipText);
+
+    // title attribute = simplest hover tooltip
+    return `<span class="cite" tabindex="0" data-tip="${label}${page}\n\n${tip}">[${n}]</span>`;
+  });
+
+  // preserve newlines as <br>
+  html = html.replaceAll("\n", "<br>");
+
+  return html;
+}
+
 // Job + polling UI
 const STAGE_LABELS = {
   ingestion: "Ingestion",
@@ -470,19 +602,22 @@ document.getElementById("chatForm").addEventListener("submit", async (e) => {
     const sources = Array.isArray(data.sources) ? data.sources : [];
 
     // build a small readable response
-    let out = answer;
+    // let out = answer;
 
-    if (sources.length) {
-      out += "\n\nSources:";
-      sources.forEach((s, i) => {
-        const name = s.source_name || s.doc_id || "unknown";
-        const page = (s.page_num !== undefined && s.page_num !== null) ? ` p.${s.page_num}` : "";
-        const score = (typeof s.score === "number") ? ` score=${s.score.toFixed(3)}` : "";
-        out += `\n${i + 1}. ${name}${page}${score}`;
-      });
-    }
+    // if (sources.length) {
+    //   out += "\n\nSources:";
+    //   sources.forEach((s, i) => {
+    //     const name = s.source_name || s.doc_id || "unknown";
+    //     const page = (s.page_num !== undefined && s.page_num !== null) ? ` p.${s.page_num}` : "";
+    //     const score = (typeof s.score === "number") ? ` score=${s.score.toFixed(3)}` : "";
+    //     out += `\n${i + 1}. ${name}${page}${score}`;
+    //   });
+    // }
 
-    botDiv.textContent = out;
+    // botDiv.textContent = out;
+    
+    const html = renderAnswerWithCitations(answer, sources);
+    botDiv.innerHTML = html;
   }
 
 
@@ -549,38 +684,90 @@ function startPanelPolling(collectionId) {
     const i = data.index || {};
     const h = data.health || {};
 
-    panelEl.innerHTML = `
-      <div>
-        <h3>📊 Processing Status</h3>
-        <div><b>Stage:</b> ${p.current_stage || "-"}</div>
-        <div><b>Status:</b> ${p.job_status || "-"}</div>
-        <div><b>Total Docs:</b> ${p.total_docs ?? "-"}</div>
+    const stage = (p.current_stage || "-").toString();
+const status = (p.job_status || "-").toString();
 
-        <hr/>
+const statusClass =
+  status === "done" || status === "ready" ? "ok" :
+  status === "running" || status === "processing" ? "run" :
+  status === "failed" ? "bad" : "";
 
-        <h3>⚡ Embedding Metrics</h3>
-        <div><b>Avoidance Rate:</b> ${e.embedding_avoidance_rate_pct ?? "-"}%</div>
-        <div><b>SQLite Hits:</b> ${e.sqlite_hits ?? "-"}</div>
-        <div><b>Embedded / Skipped:</b> ${e.chunks_embedded ?? "-"} / ${e.chunks_skipped ?? "-"}</div>
-        <div><b>Wall Time:</b> ${e.rerun_wall_time_s ?? "-"} s</div>
-        <div><b>Time Saved (est):</b> ${e.embedding_time_saved_s_est ?? "-"} s</div>
+const avoidance = (e.embedding_avoidance_rate_pct ?? "-");
+const embedded = (e.chunks_embedded ?? "-");
+const skipped = (e.chunks_skipped ?? "-");
 
-        <hr/>
+const barPct = (typeof avoidance === "number")
+  ? Math.max(0, Math.min(100, avoidance))
+  : 0;
 
-        <h3>🧠 Index Stats</h3>
-        <div><b>Total Vectors:</b> ${i.total_vectors ?? "-"}</div>
-        <div><b>Dim:</b> ${i.vector_dimension ?? "-"}</div>
-        <div><b>Metric:</b> ${i.metric_type ?? "-"}</div>
-        <div><b>Indexed Docs:</b> ${i.indexed_docs_count ?? "-"}</div>
-
-        <hr/>
-
-        <h3>🧮 System Health</h3>
-        <div><b>Cache DB:</b> ${bytesToMB(h.cache_db_size_bytes)}</div>
-        <div><b>Vector File:</b> ${bytesToMB(h.vector_file_size_bytes)}</div>
-        <div><b>Total Storage:</b> ${bytesToMB(h.collection_storage_bytes)}</div>
+panelEl.innerHTML = `
+    <div class="sp-head">
+      <div class="sp-title">Workspace Metrics</div>
+      <div class="sp-pill ${statusClass}">
+        <span class="dot"></span>
+        <span>${status.toUpperCase()}</span>
       </div>
-    `;
+    </div>
+
+    <div class="sp-grid">
+
+      <div class="sp-card">
+        <div class="sp-card-h">
+          <div class="sp-card-title">Processing</div>
+          <div class="sp-mini">Stage</div>
+        </div>
+
+        <div class="sp-rows">
+          <div class="sp-row"><div class="sp-k">Stage</div><div class="sp-v">${stage}</div></div>
+          <div class="sp-row"><div class="sp-k">Total Docs</div><div class="sp-v">${p.total_docs ?? "-"}</div></div>
+        </div>
+      </div>
+
+      <div class="sp-card">
+        <div class="sp-card-h">
+          <div class="sp-card-title">Embedding</div>
+          <div class="sp-mini">Cache impact</div>
+        </div>
+
+        <div class="sp-rows">
+          <div class="sp-row"><div class="sp-k">Avoidance</div><div class="sp-v">${avoidance}%</div></div>
+          <div class="sp-bar"><span style="width:${barPct}%"></span></div>
+          <div class="sp-row"><div class="sp-k">SQLite Hits</div><div class="sp-v">${e.sqlite_hits ?? "-"}</div></div>
+          <div class="sp-row"><div class="sp-k">Embedded / Skipped</div><div class="sp-v">${embedded} / ${skipped}</div></div>
+          <div class="sp-row"><div class="sp-k">Wall Time</div><div class="sp-v">${e.rerun_wall_time_s ?? "-"} s</div></div>
+          <div class="sp-row"><div class="sp-k">Time Saved (est)</div><div class="sp-v">${e.embedding_time_saved_s_est ?? "-"} s</div></div>
+        </div>
+      </div>
+
+      <div class="sp-card">
+        <div class="sp-card-h">
+          <div class="sp-card-title">Index</div>
+          <div class="sp-mini">Vector store</div>
+        </div>
+
+        <div class="sp-rows">
+          <div class="sp-row"><div class="sp-k">Total Vectors</div><div class="sp-v">${i.total_vectors ?? "-"}</div></div>
+          <div class="sp-row"><div class="sp-k">Dim</div><div class="sp-v">${i.vector_dimension ?? "-"}</div></div>
+          <div class="sp-row"><div class="sp-k">Metric</div><div class="sp-v">${i.metric_type ?? "-"}</div></div>
+          <div class="sp-row"><div class="sp-k">Indexed Docs</div><div class="sp-v">${i.indexed_docs_count ?? "-"}</div></div>
+        </div>
+      </div>
+
+      <div class="sp-card">
+        <div class="sp-card-h">
+          <div class="sp-card-title">System</div>
+          <div class="sp-mini">Storage</div>
+        </div>
+
+        <div class="sp-rows">
+          <div class="sp-row"><div class="sp-k">Cache DB</div><div class="sp-v">${bytesToMB(h.cache_db_size_bytes)}</div></div>
+          <div class="sp-row"><div class="sp-k">Vector File</div><div class="sp-v">${bytesToMB(h.vector_file_size_bytes)}</div></div>
+          <div class="sp-row"><div class="sp-k">Total Storage</div><div class="sp-v">${bytesToMB(h.collection_storage_bytes)}</div></div>
+        </div>
+      </div>
+
+    </div>
+  `;
   }
 
   tick();

@@ -1,12 +1,21 @@
 # DocuChat
 
-> > This is my Capstone Project: "Reducing Hallucination in Retrieval-Augmented Generation Using Hybrid Vector–Graph Integration with Evidence Grounding"
+> Capstone Project (Phase 1 – Vector-Only Baseline)
 
-This repository implements a deterministic, restart-safe document processing pipeline designed to prepare unstructured documents for Retrieval-Augmented Generation (RAG), semantic search, and downstream AI applications.
+This repository implements the Vector-Only baseline system for my Capstone Project:
 
-The system transforms raw documents into structured, citation-accurate semantic chunks while preserving full traceability to the original source.
+"Reducing Hallucination in Retrieval-Augmented Generation Using Hybrid Vector–Graph Integration with Evidence Grounding"
 
-Stages 0 through 5 establish a stable foundation for scalable embedding, indexing, and retrieval.
+This version establishes the controlled experimental baseline using:
+
+- Deterministic document pipeline
+- Cache-aware embedding
+- FAISS vector indexing
+- Vector-based retrieval
+- Evidence-grounded answer generation
+- Evaluation-ready logging
+
+The Hybrid Vector–Graph system will be introduced in Phase 2 and compared against this baseline.
 
 ---
 
@@ -25,208 +34,90 @@ Cleaning
    ↓
 Chunking
    ↓
-Ready for Embedding (Stage 6)
+Embedding (Vectorization)
+   ↓
+FAISS Indexing
+   ↓
+Vector Retrieval
+   ↓
+Grounded Generation
+   ↓
+Evaluation Logging
 ```
 
 Each stage produces deterministic outputs, enabling restart safety, append-only processing, and reproducibility.
 
 ---
 
-# Stage 0 - Storage and Job Foundation
+# Current System Status (Vector Baseline Complete)
 
-Stage 0 establishes the storage structure and job tracking system.
+Implemented:
 
-Key responsibilities:
+* Stage 0 – Storage & Job Foundation
+* Stage 1 – File Registration
+* Stage 2 – Ingestion
+* Stage 3 – Extraction
+* Stage 4 – Cleaning
+* Stage 5 – Semantic Chunking
+* Stage 6 – Cache-Aware Embedding
+* Stage 7 – FAISS Indexing
+* Stage 8 – Vector Retrieval
+* Stage 9 – Evidence-Grounded Generation
+* Stage 10 – Evaluation Logging
 
-* Create deterministic collection and job identifiers
-* Track document processing state across stages
-* Maintain append-safe manifest files
-* Ensure atomic file writes to prevent corruption
-* Enable safe restart and resume behavior
+Planned (Phase 2 – Hybrid System):
 
-This stage provides the backbone for all subsequent processing.
-
----
-
-# Stage 1 - File Registration
-
-Documents are registered into the system and associated with a collection.
-
-Key outcomes:
-
-* Document identity is established
-* Collection manifest is updated
-* Job record is created
-* Document becomes eligible for processing
-
-This stage ensures every document is tracked consistently.
+* Graph Construction
+* Hybrid Vector–Graph Retrieval
+* Graph Contribution Analysis
+* Hybrid vs Vector Metric Comparison
 
 ---
 
-# Stage 2 - Ingestion
+# Vector-Only Baseline Capabilities
 
-Raw files are ingested into the pipeline and assigned a stable identity.
+This baseline system implements a production-grade Vector RAG architecture with:
 
-Key outcomes:
+- Dense embedding generation (BGE-M3 / configurable model)
+- Content-based embedding reuse (cross-document deduplication)
+- Deterministic FAISS index construction
+- Vector similarity retrieval (L2 metric)
+- Strict evidence-grounded prompt design
+- Mandatory citation enforcement
+- Evaluation-ready structured query logging
 
-* Each document receives a deterministic `doc_id`
-* Files are stored in the raw storage directory
-* Collection manifest is updated
-* Job state reflects ingestion completion
+The system supports:
 
-This stage establishes the permanent identity of each document.
-
----
-
-# Stage 3 - Extraction
-
-Document contents are extracted into structured text form while preserving reading order.
-
-Supported formats:
-
-* PDF
-* DOCX
-
-Key outcomes:
-
-* Page-level text extraction
-* Full document text assembly
-* Preservation of page boundaries
-* Storage of extracted content in structured JSON format
-
-This stage converts binary files into structured textual representations.
+- Recall@K evaluation
+- Citation precision analysis
+- Unsupported claim detection
+- Abstention accuracy measurement
+- Retrieval vs generation error separation
 
 ---
 
-# Stage 4 - Cleaning
+# Evaluation Framework (Baseline)
 
-Extracted text is normalized and prepared for downstream semantic processing.
+All queries are logged in structured JSONL format, enabling offline metric computation.
 
-Key outcomes:
+Each log entry records:
 
-* Removal of extraction artifacts
-* Text normalization
-* Garbage detection and filtering
-* Clean text stored alongside original text
+- Retrieved chunks before rerank
+- Final context chunks
+- Generated answer
+- Extracted citations
+- Retrieval configuration
+- Embedder identity
 
-Both original and cleaned text are preserved to maintain citation accuracy.
+Metrics computed offline:
 
-This ensures embedding quality while preserving source fidelity.
+- Recall@K
+- Citation Precision
+- Unsupported Claim Rate
+- Abstention Accuracy
+- Answer Correctness (optional rubric)
 
----
-
-# Stage 5 - Semantic Chunking
-
-Documents are divided into meaningful semantic units suitable for embedding and retrieval.
-
-This stage uses a semantic-first strategy that respects document structure.
-
-Key outcomes:
-
-* Paragraph-based chunking
-* Structure-aware segmentation
-* Deterministic chunk identifiers
-* Citation-accurate span tracking
-* Stable chunk boundaries
-
-Each chunk includes:
-
-* Document reference
-* Page number
-* Exact source span offsets
-* Original text (for citations)
-* Clean text (for embeddings)
-
-Chunking preserves meaning while enabling efficient retrieval.
-
----
-
-# Stage 6 - Embedding
-
-Stage 6 converts semantic chunks into vector representations for similarity search and downstream retrieval.
-
-This stage introduces a cache-aware embedding mechanism to prevent redundant computation.
-
-Key outcomes:
-
-* Each chunk’s cleaned text is transformed into a vector representation
-* A versioned embedder identity ensures reproducibility
-* Embeddings are stored per document in structured JSONL format
-* Cross-document content reuse prevents duplicate embedding calls
-* Per-document idempotency ensures safe reruns
-* Embedding metrics are recorded for observability
-
-This stage guarantees that identical content is embedded only once while preserving document-level traceability.
-
-After completion, all chunks are vectorized and ready for indexing.
-
----
-
-# Stage 7 - Indexing
-
-Stage 7 builds a fast semantic search index over all embedded vectors in a collection.
-
-This stage prepares the system for efficient retrieval.
-
-Key outcomes:
-
-* All document vectors are validated for consistency
-* Deterministic ordering ensures reproducible index builds
-* A FAISS-based ANN index is created
-* Metadata mapping preserves chunk-to-document traceability
-* Index artifacts are written atomically for safety
-
-The result is a millisecond-level semantic search capability across the entire collection.
-
---- 
-
-# Failure Handling
-
-The pipeline follows a document-level failure model.
-
-If a document fails:
-
-* The failure is recorded
-* Other documents continue processing
-* The job only fails if all documents fail
-
-This ensures robustness in mixed document collections.
-
----
-
-# Restart Safety
-
-The pipeline is fully restart-safe.
-
-If execution stops unexpectedly, restarting the job will:
-
-* Resume from the last incomplete stage
-* Skip already processed documents
-* Avoid duplicate outputs
-* Maintain consistency
-
-No manual recovery steps are required.
-
----
-
-# Current Pipeline Status
-
-Stages completed:
-
-* Stage 0 - Storage and Job Foundation
-* Stage 1 - File Registration
-* Stage 2 - Ingestion
-* Stage 3 - Extraction
-* Stage 4 - Cleaning
-* Stage 5 - Semantic Chunking
-* Stage 6 - Embedding
-* Stage 7 - Indexing
-
-Yed to do:
-
-* Stage 8 - Graph
-* Stage 9 - Retrieval + grounded generation
-* Stage 10 - Chat persistence
+This establishes the experimental control condition for later Hybrid comparison.
 
 ---
 
@@ -263,8 +154,8 @@ Each job tracks stage-level and document-level progress, enabling real-time moni
  - **Clear Separation of Pipeline Stages**
 Each stage (INGEST → EXTRACT → CLEAN → CHUNK) is independently modular, making the system maintainable, testable, and extensible.
 
- - **Foundation for Scalable Retrieval Systems**
-The pipeline is designed to integrate seamlessly with embedding models, vector indexes (FAISS), and graph-based retrieval, forming the backbone of a scalable RAG system.
+ - **Foundation for Hybrid Retrieval Research**
+The system is intentionally architected to support future integration of graph-based retrieval. The current implementation serves as the controlled Vector baseline for experimental comparison.
 
 ---
 
