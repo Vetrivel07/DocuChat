@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DocuChat</title>
+  <link rel="stylesheet" href="{{ request.url_for('static', path='css/style.css') }}">
+</head>
+<body>
+
+<header class="topbar">
+
+  <div class="topbar-left">
+    <div class="logo-badge">DC</div>
+    <div class="brand"><span class="brand-1">Docu</span><span class="brand-2">Chat</span></div>
+  </div>
+
+  <div class="topbar-right">
+    <button class="theme-toggle" id="themeToggle" title="Toggle theme" aria-label="Toggle theme">
+      <span class="theme-toggle-track">
+        <span class="theme-icon theme-sun">☀</span>
+        <span class="theme-icon theme-moon">☾</span>
+        <span class="theme-thumb"></span>
+      </span>
+    </button>
+    <button class="nav-link" id="vanishBtn" type="button" title="Clear current workspace">Vanish</button>
+    <button class="icon-btn" id="openSidebarBtn">☰</button>
+  </div>
+
+</header>
+
+<aside class="sidebar" id="sidebar" aria-hidden="true">
+  <div class="sidebar-header">
+    <div class="sidebar-title">Dashboard</div>
+    <button class="icon-btn" id="closeSidebarBtn">✕</button>
+  </div>
+  <div class="sidebar-body">
+    
+    <div class="sidebar-card sidebar-scroll-card" id="side-panel">
+      Upload documents to see metrics.
+    </div>
+    <div class="sidebar-card" id="evalLinkCard" hidden>
+      <a class="eval-link-btn" href="/eval/dashboard" target="_blank" rel="noopener noreferrer">
+        Open Evaluation Dashboard
+      </a>
+    </div>
+
+  </div>
+</aside>
+
+<div class="backdrop" id="backdrop" hidden></div>
+
+<main class="page">
+  <section class="hero" id="heroSection">
+    <h1>DocuChat: RAG-Powered Document Intelligence</h1>
+    <p class="subtitle">Turn your static files into an interactive knowledge base - just upload, ask, and uncover.</p>
+  </section>
+
+  <section class="panel">
+
+    <div id="uploadPanel">
+      <form id="uploadForm" class="rag-form" enctype="multipart/form-data">
+        <div class="grid">
+          <div class="field field-full">
+            <label for="files">Upload Files</label>
+
+            <div class="drop-area" id="dropArea">
+
+              <input
+                id="files"
+                name="files"
+                type="file"
+                accept=".pdf,.docx"
+                multiple
+                required
+              />
+
+              <div class="drop-content">
+
+                <div class="upload-icon"><svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="currentColor" class="s-icon s-icon-icon-upload" viewBox="0 0 16 16">
+  <path fill-rule="evenodd" d="M14.666 9.996v2.667a2 2 0 0 1-2 2H3.333a2 2 0 0 1-2-2V9.996a.667.667 0 0 1 1.333 0v2.667a.667.667 0 0 0 .667.667h9.333a.667.667 0 0 0 .667-.667V9.996a.666.666 0 1 1 1.333 0ZM5.14 5.803l2.193-2.2v6.393a.667.667 0 0 0 1.333 0V3.603l2.194 2.2a.67.67 0 1 0 .946-.947L8.473 1.523a.767.767 0 0 0-.22-.14.667.667 0 0 0-.507 0 .767.767 0 0 0-.22.14L4.193 4.856a.67.67 0 0 0 .947.947Z"/>
+</svg></div>
+
+                <div class="upload-title">
+                  Drop PDF or DOCX files here
+                </div>
+
+                <div class="upload-sub">
+                  or click to browse
+                </div>
+
+                <div class="upload-limit">
+                  Max file size 25MB.
+                </div>
+
+                <div class="upload-selected" id="selectedFiles">
+                  Selected files:
+                </div>
+
+              </div>
+
+            </div>
+          </div>
+
+          <div class="field field-full">
+            <label>Retrieval Mode</label>
+            <div class="mode-picker" id="modePicker">
+              <label class="mode-option">
+                <input type="radio" name="retrieval_mode" value="vector" checked>
+                <span>Vector Only</span>
+              </label>
+              <label class="mode-option">
+                <input type="radio" name="retrieval_mode" value="hybrid">
+                <span>Hybrid</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="field field-full actions">
+            <button class="btn btn-primary" type="submit">Upload & Process</button>
+          </div>
+        </div>
+      </form>
+      <!-- <p class="subtitle" style="margin-top:14px;">
+        Health: <code>/health/live</code> · <code>/health/ready</code>
+      </p> -->
+    </div>
+
+    <div id="processingPanel" hidden>
+      <div id="stageLine" class="stage-line">⏳ Starting…</div>
+      <div id="stageDelayHint" class="stage-delay-hint" hidden></div>
+      
+      <div class="pipeline-out" style="margin-top:10px;">
+        <div><strong>Job ID:</strong> <code id="jobIdOut">-</code></div>
+        <div><strong>Collection:</strong> <code id="collectionIdOut">-</code></div>
+        <div><strong>Documents:</strong> <code id="sourceNamesOut">-</code></div>
+        <div id="errorOut"></div>
+        <button id="retryBtn" class="btn" type="button" hidden>Retry</button>
+      </div>
+    </div>
+
+    <div id="chatPanel" hidden>
+      <div id="chatMeta" style="display:none;">
+        <code id="activeCollection">-</code>
+      </div>
+
+      <div class="chat-layout">
+
+        <aside class="chat-docs-sidebar">
+          <div class="docs-title-dark">Documents</div>
+          <div id="docsList" class="docs-list-dark"></div>
+        </aside>
+
+        <div class="chat-shell">
+          <div class="chat-main">
+            <div id="chatLog" class="chat-body"></div>
+            <form id="chatForm" class="chat-composer">
+              <button type="button" class="composer-plus" id="addFilesBtn" title="Add files">+</button>
+              <input id="chatInput" class="composer-input" type="text"
+                    placeholder="Ask anything" autocomplete="off" required />
+              <button class="composer-send" type="submit">Send</button>
+            </form>
+            <input id="addFilesInput" type="file" accept=".pdf,.docx" multiple hidden />
+          </div>
+        </div>
+
+      </div>
+
+  </section>
+</main>
+
+<footer class="footer">
+  <div class="footer-bottom">
+    Copyright © {{ current_year }} DocuChat
+  </div>
+</footer>
+
+<script src="{{ request.url_for('static', path='js/script.js') }}"></script>
+</body>
+</html>

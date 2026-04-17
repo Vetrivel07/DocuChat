@@ -1,0 +1,64 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+
+# Virtual Environment
+.venv/
+venv/
+env/
+ENV/
+
+# Environment & Secrets
+*.env.original
+
+# Storage — runtime data
+storage/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs & temp
+*.log
+*.tmp
+*.bak
+*.orig
+
+# Model cache 
+.cache/
+models/
+*.bin
+*.pt
+*.onnx
+*.safetensors
+
+# UV / pip
+.uv/
+uv.lock
+pip-wheel-metadata/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Report figures
+*.png
+*.jpg
+*.jpeg
+*.pdf

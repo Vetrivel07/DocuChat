@@ -1,0 +1,1058 @@
+let panelPollTimer = null;
+let panelPollCollectionId = null;
+
+(() => {
+  const sidebar = document.getElementById("sidebar");
+  const backdrop = document.getElementById("backdrop");
+  const openBtn = document.getElementById("openSidebarBtn");
+  const closeBtn = document.getElementById("closeSidebarBtn");
+
+  if (!sidebar || !backdrop || !openBtn || !closeBtn) return;
+
+  function openSidebar() {
+    sidebar.classList.add("open");
+    sidebar.setAttribute("aria-hidden", "false");
+    backdrop.hidden = false;
+    requestAnimationFrame(() => backdrop.classList.add("show"));
+  }
+
+  function closeSidebar() {
+    sidebar.classList.remove("open");
+    sidebar.setAttribute("aria-hidden", "true");
+    backdrop.classList.remove("show");
+    setTimeout(() => { backdrop.hidden = true; }, 150);
+  }
+
+  openBtn.addEventListener("click", openSidebar);
+  closeBtn.addEventListener("click", closeSidebar);
+  backdrop.addEventListener("click", closeSidebar);
+
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeSidebar();
+  });
+})();
+
+// Persist last active collection across refresh
+const LS_ACTIVE_COLLECTION_KEY = "docuchat_active_collection";
+const LS_RETRIEVAL_MODE_KEY = "docuchat_retrieval_mode";
+
+function saveActiveCollectionId(collectionId){
+  try { localStorage.setItem(LS_ACTIVE_COLLECTION_KEY, collectionId); } catch(e) {}
+}
+
+function loadActiveCollectionId(){
+  try { return (localStorage.getItem(LS_ACTIVE_COLLECTION_KEY) || "").trim(); } catch(e) { return ""; }
+}
+
+function clearActiveCollectionId(){
+  try { localStorage.removeItem(LS_ACTIVE_COLLECTION_KEY); } catch(e) {}
+}
+
+function saveRetrievalMode(mode){
+  try { localStorage.setItem(LS_RETRIEVAL_MODE_KEY, mode); } catch(e) {}
+}
+
+function loadRetrievalMode(){
+  try { return (localStorage.getItem(LS_RETRIEVAL_MODE_KEY) || "vector").trim(); } catch(e) { return "vector"; }
+}
+
+function clearRetrievalMode(){
+  try { localStorage.removeItem(LS_RETRIEVAL_MODE_KEY); } catch(e) {}
+}
+
+// ── Chat history persistence ──────────────────────────────────────────────
+const LS_CHAT_HISTORY_KEY = "docuchat_chat_history";
+const MAX_HISTORY_TURNS = 10; // max Q&A pairs to store
+
+function saveChatHistory(history) {
+  try { localStorage.setItem(LS_CHAT_HISTORY_KEY, JSON.stringify(history)); } catch(e) {}
+}
+
+function loadChatHistory() {
+  try {
+    const raw = localStorage.getItem(LS_CHAT_HISTORY_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch(e) { return []; }
+}
+
+function clearChatHistory() {
+  try { localStorage.removeItem(LS_CHAT_HISTORY_KEY); } catch(e) {}
+}
+
+function appendToHistory(history, question, answer) {
+  history.push({ role: "user", content: question });
+  history.push({ role: "assistant", content: answer });
+  // keep only last MAX_HISTORY_TURNS turns (each turn = 2 entries)
+  const maxEntries = MAX_HISTORY_TURNS * 2;
+  if (history.length > maxEntries) {
+    history.splice(0, history.length - maxEntries);
+  }
+  return history;
+}
+
+
+function setEvalLinkVisibility(show) {
+  const el = document.getElementById("evalLinkCard");
+  if (!el) return;
+  el.hidden = !show;
+}
+
+function escapeHtml(s) {
+  return (s || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+const STAGE_DELAY_THRESHOLDS_MS = {
+  embeddings: 3000,
+  indexing: 3000,
+  graph: 4000,
+};
+
+const STAGE_DELAY_MESSAGES = {
+  embeddings: "Embedding your document is taking a bit longer than usual. Please stay with us.",
+  indexing: "Loading vectors into the database is taking a bit longer than usual. Please stay with us.",
+  graph: "Building the knowledge graph is taking a bit longer than usual. Please stay with us.",
+};
+
+let stageDelayTimer = null;
+let stageDelayShownForStage = null;
+let stageDelayJobId = null;
+
+function showStageDelayHint(message) {
+  const el = document.getElementById("stageDelayHint");
+  if (!el) return;
+  el.textContent = message || "This stage is taking a bit longer than usual. Please stay with us.";
+  el.hidden = false;
+}
+
+function hideStageDelayHint() {
+  const el = document.getElementById("stageDelayHint");
+  if (!el) return;
+  el.hidden = true;
+  el.textContent = "";
+}
+
+function clearStageDelayTimer() {
+  if (stageDelayTimer) {
+    clearTimeout(stageDelayTimer);
+    stageDelayTimer = null;
+  }
+}
+
+function scheduleStageDelayHint(stageKey, jobId) {
+  clearStageDelayTimer();
+
+  if (!stageKey) return;
+  if (!jobId) return;
+  if (stageDelayShownForStage === `${jobId}:${stageKey}`) return;
+
+  const threshold = STAGE_DELAY_THRESHOLDS_MS[stageKey];
+  const message = STAGE_DELAY_MESSAGES[stageKey];
+
+  if (!threshold || !message) return;
+
+  stageDelayTimer = setTimeout(() => {
+    stageDelayShownForStage = `${jobId}:${stageKey}`;
+    showStageDelayHint(message);
+  }, threshold);
+}
+
+const themeToggle = document.getElementById("themeToggle");
+
+// ===== Citation tooltip portal (prevents clipping inside overflow containers) =====
+let citeTipEl = null;
+
+function ensureCiteTooltipEl() {
+  if (citeTipEl) return citeTipEl;
+  citeTipEl = document.createElement("div");
+  citeTipEl.className = "cite-tooltip-portal";
+  citeTipEl.setAttribute("role", "tooltip");
+  document.body.appendChild(citeTipEl);
+  return citeTipEl;
+}
+
+function clamp(n, min, max) {
+  return Math.max(min, Math.min(max, n));
+}
+
+function showCiteTooltip(anchorEl) {
+  const tip = (anchorEl?.getAttribute("data-tip") || "").trim();
+  if (!tip) return;
+
+  const el = ensureCiteTooltipEl();
+  el.textContent = tip;
+  el.classList.add("show");
+
+  const r = anchorEl.getBoundingClientRect();
+  const pad = 8;
+
+  el.style.left = "0px";
+  el.style.top = "0px";
+
+  const tw = el.offsetWidth;
+  const th = el.offsetHeight;
+
+  const spaceBelow = window.innerHeight - r.bottom;
+  const placeBelow = spaceBelow >= (th + 12);
+
+  const left = clamp(r.left, pad, window.innerWidth - tw - pad);
+  const top = placeBelow
+    ? clamp(r.bottom + 10, pad, window.innerHeight - th - pad)
+    : clamp(r.top - th - 10, pad, window.innerHeight - th - pad);
+
+  el.style.left = `${left}px`;
+  el.style.top = `${top}px`;
+}
+
+function hideCiteTooltip() {
+  if (!citeTipEl) return;
+  citeTipEl.classList.remove("show");
+}
+
+// Delegate tooltip behavior from chatLog (works for dynamically injected messages)
+const chatLogElForTips = document.getElementById("chatLog");
+if (chatLogElForTips) {
+  chatLogElForTips.addEventListener("mouseenter", (e) => {
+    const cite = e.target.closest?.(".cite");
+    if (!cite) return;
+    showCiteTooltip(cite);
+  }, true);
+
+  chatLogElForTips.addEventListener("mousemove", (e) => {
+    const cite = e.target.closest?.(".cite");
+    if (!cite) return;
+    showCiteTooltip(cite);
+  }, true);
+
+  chatLogElForTips.addEventListener("mouseleave", (e) => {
+    const cite = e.target.closest?.(".cite");
+    if (!cite) return;
+    hideCiteTooltip();
+  }, true);
+
+  chatLogElForTips.addEventListener("focusin", (e) => {
+    const cite = e.target.closest?.(".cite");
+    if (!cite) return;
+    showCiteTooltip(cite);
+  });
+
+  chatLogElForTips.addEventListener("focusout", (e) => {
+    const cite = e.target.closest?.(".cite");
+    if (!cite) return;
+    hideCiteTooltip();
+  });
+}
+
+window.addEventListener("scroll", hideCiteTooltip, true);
+window.addEventListener("resize", hideCiteTooltip);
+
+function buildCitationMap(sources) {
+  const map = {};
+  (sources || []).forEach((s) => {
+    if (typeof s.source_idx === "number") {
+      map[String(s.source_idx)] = s;
+    }
+  });
+  return map;
+}
+
+function renderAnswerWithCitations(answer, sources) {
+  const srcMap = buildCitationMap(sources);
+
+  // escape first to avoid XSS
+  let html = escapeHtml(answer || "");
+
+  // replace [1] [2] with spans
+  html = html.replace(/\[(\d{1,3})\]/g, (m, n) => {
+    const s = srcMap[n];
+    if (!s) return m;
+
+    const label = escapeHtml(s.source_name || s.doc_id || "source");
+    const page = (s.page_num !== undefined && s.page_num !== null) ? ` p.${s.page_num}` : "";
+    const tipText = (s.text || "").trim();
+    const tip = escapeHtml(tipText.length > 700 ? (tipText.slice(0, 700) + "…") : tipText);
+
+    // title attribute = simplest hover tooltip
+    return `<span class="cite" tabindex="0" data-tip="${label}${page}\n\n${tip}">[${n}]</span>`;
+  });
+
+  // preserve newlines as <br>
+  html = html.replaceAll("\n", "<br>");
+
+  return html;
+}
+
+// Job + polling UI
+const STAGE_LABELS = {
+  ingestion: "Uploading Document",
+  extraction: "Extracting Text",
+  cleaning: "Cleaning & Normalizing Text",
+  chunking: "Splitting into Chunks",
+  embeddings: "Embedding Your Document",
+  indexing: "Loading Vectors into Database",
+  graph: "Building Knowledge Graph",
+  ready: "Ready for Querying",
+};
+
+
+const uploadPanel = document.getElementById("uploadPanel");
+const processingPanel = document.getElementById("processingPanel");
+const chatPanel = document.getElementById("chatPanel");
+
+const jobIdOut = document.getElementById("jobIdOut");
+const collectionIdOut = document.getElementById("collectionIdOut");
+const errorOut = document.getElementById("errorOut");
+const retryBtn = document.getElementById("retryBtn");
+const sourceNamesOut = document.getElementById("sourceNamesOut");
+const sourceNamesChat = document.getElementById("sourceNamesChat");
+
+
+const activeCollection = document.getElementById("activeCollection");
+const chatLog = document.getElementById("chatLog");
+const stageLine = document.getElementById("stageLine");
+const heroSection = document.getElementById("heroSection");
+
+const stageStack = document.getElementById("stageStack");
+
+let pageEl = null;
+
+let currentCardEl = null;
+let currentStageKey = null;
+
+
+let lastUploadFormData = null;
+
+const docsList = document.getElementById("docsList");
+
+async function renderDocs(collectionId){
+  if (!docsList) return;
+  docsList.innerHTML = "";
+
+  const res = await fetch(`/collections/${encodeURIComponent(collectionId)}/files`);
+  if (!res.ok) {
+    docsList.textContent = "-";
+    return;
+  }
+
+  const data = await res.json();
+  const files = Array.isArray(data.files) ? data.files : [];
+
+  if (!files.length) {
+    docsList.textContent = "-";
+    return;
+  }
+
+  for (const f of files){
+    const a = document.createElement("a");
+    a.className = "doc-pill";
+    a.href = f.download_url;
+    a.textContent = f.original_filename || f.file_id;
+    a.target = "_blank";
+    docsList.appendChild(a);
+  }
+}
+
+const filesInput = document.getElementById("files");
+const selectedFilesEl = document.getElementById("selectedFiles");
+
+if (filesInput && selectedFilesEl) {
+  filesInput.addEventListener("change", () => {
+    const files = Array.from(filesInput.files || []);
+
+    if (!files.length) {
+      selectedFilesEl.textContent = "Selected files:";
+      return;
+    }
+
+    const names = files.map(f => f.name).join(", ");
+    selectedFilesEl.textContent = `Selected files: ${names}`;
+  });
+}
+
+// Force initial UI state
+document.addEventListener("DOMContentLoaded", async () => {
+  pageEl = document.querySelector(".page");
+  setEvalLinkVisibility(false);
+
+  const rememberedMode = loadRetrievalMode();
+  const radio = document.querySelector(`input[name="retrieval_mode"][value="${rememberedMode}"]`);
+  if (radio) radio.checked = true;
+
+  const remembered = loadActiveCollectionId();
+  if (remembered && remembered !== "-") {
+    activeCollection.textContent = remembered;
+    await renderDocs(remembered);
+    showMode("chat");
+    startPanelPolling(remembered);
+    restoreChatLog(); // restore chat messages after showing chat panel
+  } else {
+    showMode("upload");
+    stopPanelPolling();
+  }
+});
+
+function restoreChatLog() {
+  if (!chatLog) return;
+  const history = loadChatHistory();
+  if (!history.length) return;
+
+  // history is flat [{role:"user", content:...}, {role:"assistant", content:...}, ...]
+  // pair them up to render
+  for (let i = 0; i < history.length; i++) {
+    const entry = history[i];
+    const div = document.createElement("div");
+
+    if (entry.role === "user") {
+      div.className = "chat-msg user";
+      div.textContent = entry.content;
+    } else {
+      div.className = "chat-msg bot";
+      // answer may contain citations — but we don't have sources here
+      // so just render as plain text with line breaks
+      div.innerHTML = escapeHtml(entry.content).replaceAll("\n", "<br>");
+    }
+
+    chatLog.appendChild(div);
+  }
+
+  chatLog.scrollTop = chatLog.scrollHeight;
+}
+
+
+// add '+ file' logic
+const addFilesBtn = document.getElementById("addFilesBtn");
+const addFilesInput = document.getElementById("addFilesInput");
+
+if (addFilesBtn && addFilesInput) {
+  addFilesBtn.addEventListener("click", () => addFilesInput.click());
+
+  addFilesInput.addEventListener("change", async () => {
+    const files = Array.from(addFilesInput.files || []);
+    if (!files.length) return;
+
+    const collectionId = (activeCollection?.textContent || "").trim();
+    if (!collectionId || collectionId === "-") return;
+
+    const fd = new FormData();
+    fd.append("collection_id", collectionId);
+    for (const f of files) fd.append("files", f);
+
+    // start a new job, same collection
+    await startJob(fd); // uses /uploads; server will keep same collection_id
+
+    // reset picker so selecting same file again triggers change
+    addFilesInput.value = "";
+  });
+}
+
+function iconFor(state){
+  if (state === "running") return "⏳";
+  if (state === "done") return "✅";
+  if (state === "failed") return "❌";
+  return "•";
+}
+
+function makeStageCard(stage, stage_state, message=""){
+  const card = document.createElement("div");
+  card.className = "stage-card";
+
+  const ico = document.createElement("span");
+  ico.className = "stage-ico";
+  ico.textContent = iconFor(stage_state);
+
+  const wrap = document.createElement("div");
+
+  const label = document.createElement("span");
+  label.className = "stage-text";
+  label.textContent = STAGE_LABELS[stage] || stage || "Processing";
+  wrap.appendChild(label);
+
+  if (message){
+    const sub = document.createElement("span");
+    sub.className = "stage-sub";
+    sub.textContent = `— ${message}`;
+    wrap.appendChild(sub);
+  }
+
+  card.appendChild(ico);
+  card.appendChild(wrap);
+  return card;
+}
+
+function showStage(stage, stage_state, message=""){
+  if (!stageStack) return;
+
+  // if same stage, just update the current card text/icon
+  if (currentCardEl && currentStageKey === stage){
+    const ico = currentCardEl.querySelector(".stage-ico");
+    if (ico) ico.textContent = iconFor(stage_state);
+
+    const text = currentCardEl.querySelector(".stage-text");
+    if (text) text.textContent = STAGE_LABELS[stage] || stage;
+
+    const sub = currentCardEl.querySelector(".stage-sub");
+    if (message){
+      if (sub) sub.textContent = `— ${message}`;
+      else{
+        const newSub = document.createElement("span");
+        newSub.className = "stage-sub";
+        newSub.textContent = `— ${message}`;
+        currentCardEl.querySelector("div")?.appendChild(newSub);
+      }
+    } else if (sub){
+      sub.remove();
+    }
+    return;
+  }
+
+  // new stage: animate old out, new in
+  const newCard = makeStageCard(stage, stage_state, message);
+  stageStack.appendChild(newCard);
+  requestAnimationFrame(() => newCard.classList.add("show"));
+
+  if (currentCardEl){
+    currentCardEl.classList.remove("show");
+    currentCardEl.classList.add("leaving");
+    setTimeout(() => currentCardEl?.remove(), 220);
+  }
+
+  currentCardEl = newCard;
+  currentStageKey = stage;
+}
+
+async function doneAndHide(){
+  if (!currentCardEl) return;
+
+  // show ✅ briefly
+  const ico = currentCardEl.querySelector(".stage-ico");
+  if (ico) ico.textContent = "✅";
+
+  await sleep(450);
+
+  // fade/slide out
+  currentCardEl.classList.remove("show");
+  currentCardEl.classList.add("leaving");
+  await sleep(220);
+
+  currentCardEl?.remove();
+  currentCardEl = null;
+  currentStageKey = null;
+}
+
+
+function showMode(mode) {
+  uploadPanel.hidden = (mode !== "upload");
+  processingPanel.hidden = (mode !== "processing");
+  chatPanel.hidden = (mode !== "chat");
+
+
+  if (heroSection) {
+    heroSection.style.display = (mode === "chat") ? "none" : "";
+  }
+  
+  const pageElNow = document.querySelector(".page");
+  if (pageElNow) pageElNow.classList.toggle("chat-mode", mode === "chat");
+  document.body.classList.toggle("chat-lock", mode === "chat");
+
+}
+
+// Vanish button: delete current collection on server + clear browser state
+const vanishBtn = document.getElementById("vanishBtn");
+
+if (vanishBtn) {
+  vanishBtn.addEventListener("click", async () => {
+    const collectionId = (activeCollection?.textContent || "").trim() || loadActiveCollectionId();
+
+    // Always clear client state first (UI reset is guaranteed)
+    clearActiveCollectionId();
+    clearRetrievalMode();
+    clearChatHistory();
+    stopPanelPolling();
+    setEvalLinkVisibility(false);
+    hideStageDelayHint();
+    clearStageDelayTimer();
+    stageDelayShownForStage = null;
+    stageDelayJobId = null;
+
+    const panelEl = document.getElementById("side-panel");
+    if (panelEl) panelEl.innerHTML = `<div>No collection loaded. Upload documents to start.</div>`;
+
+    // Reset UI to upload mode
+    if (chatLog) chatLog.innerHTML = "";
+    if (docsList) docsList.innerHTML = "";
+    if (activeCollection) activeCollection.textContent = "-";
+    showMode("upload");
+
+    // If we have a collection id, ask server to delete that workspace
+    if (!collectionId || collectionId === "-") return;
+
+    try {
+      await fetch(`/collections/${encodeURIComponent(collectionId)}`, { method: "DELETE" });
+    } catch (e) {
+      
+    }
+  });
+}
+
+
+function sleep(ms) {
+  return new Promise(r => setTimeout(r, ms));
+}
+function stageText(stage){
+  return `⏳ ${STAGE_LABELS[stage] || stage}...`;
+}
+
+async function swapStageLine(stage){
+  if (!stageLine) return;
+
+  // fade out
+  stageLine.classList.remove("fade-in");
+  stageLine.classList.add("fade-out");
+  await sleep(450);
+
+  // change text
+  stageLine.textContent = stageText(stage);
+
+  // fade in
+  stageLine.classList.remove("fade-out");
+  stageLine.classList.add("fade-in");
+}
+
+
+async function startJob(fd) {
+  errorOut.textContent = "";
+  retryBtn.hidden = true;
+  hideStageDelayHint();
+  clearStageDelayTimer();
+  stageDelayShownForStage = null;
+  stageDelayJobId = null;
+
+  const res = await fetch("/uploads", { method: "POST", body: fd });
+  if (!res.ok) {
+    errorOut.textContent = `Upload failed (HTTP ${res.status})`;
+    showMode("upload");
+    return;
+  }
+
+  const data = await res.json();
+  const { job_id, collection_id } = data;
+  stageDelayJobId = job_id;
+
+  jobIdOut.textContent = job_id;
+  collectionIdOut.textContent = collection_id;
+
+  if (stageLine) {
+    stageLine.textContent = "⏳ Starting...";
+    stageLine.classList.remove("fade-out");
+    stageLine.classList.add("fade-in");
+  }
+
+
+  if (stageStack) stageStack.innerHTML = "";
+  currentCardEl = null;
+  currentStageKey = null;
+
+  showMode("processing");
+  await pollJob(job_id, collection_id);
+}
+
+async function pollJob(jobId, collectionId) {
+  let pollMs = 1000;
+  const started = Date.now();
+  let lastStage = null;
+  let lastStageState = null;
+
+  while (true) {
+    const res = await fetch(`/jobs/${encodeURIComponent(jobId)}/status`);
+    if (!res.ok) {
+      showStage("ingestion", "failed", `Status HTTP ${res.status}`);
+
+      retryBtn.hidden = false;
+      return;
+    }
+
+    const st = await res.json();
+    if (sourceNamesOut) {
+      const names = Array.isArray(st.source_names) ? st.source_names : [];
+      const namesText = names.length ? names.join(", ") : "-";
+
+      if (sourceNamesOut) sourceNamesOut.textContent = namesText;
+      if (sourceNamesChat) sourceNamesChat.textContent = namesText;
+
+    }
+
+    // st: {state, current_stage, stage_state, message, done_stages, collection_id, ...}
+    const stage = st.current_stage || "ingestion";
+    const stageState = st.stage_state || "running";
+    const msg = st.message || "";
+
+    if (stage !== lastStage) {
+      hideStageDelayHint();
+      clearStageDelayTimer();
+      stageDelayShownForStage = null;
+
+      await swapStageLine(stage);
+
+      if (stageState === "running") {
+        scheduleStageDelayHint(stage, jobId);
+      }
+
+      lastStage = stage;
+      lastStageState = stageState;
+    } else if (stageState !== lastStageState) {
+      if (stageState === "running") {
+        scheduleStageDelayHint(stage, jobId);
+      } else {
+        hideStageDelayHint();
+        clearStageDelayTimer();
+      }
+      lastStageState = stageState;
+    }
+
+    if (st.state === "failed" || stageState === "failed") {
+      hideStageDelayHint();
+      clearStageDelayTimer();
+      stageDelayShownForStage = null;
+      stageDelayJobId = null;
+      
+      errorOut.textContent = st.message || "Job failed";
+      if (stageLine) stageLine.textContent = "❌ Failed";
+      retryBtn.hidden = false;
+      return;
+    }
+
+
+    if (st.state === "ready" || stage === "ready") {
+      hideStageDelayHint();
+      clearStageDelayTimer();
+      stageDelayShownForStage = null;
+      stageDelayJobId = null;
+
+      activeCollection.textContent = collectionId;
+      saveActiveCollectionId(collectionId);
+      await renderDocs(collectionId);
+      showMode("chat");
+      startPanelPolling(collectionId);
+      return;
+    }
+
+
+    // backoff after 10s
+    if (Date.now() - started > 10000) pollMs = 2000;
+    await sleep(pollMs);
+  }
+}
+
+retryBtn.addEventListener("click", () => {
+  if (!lastUploadFormData) return;
+  showMode("upload");
+});
+
+document.getElementById("uploadForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const form = e.target;
+  const fd = new FormData(form);
+
+  const selectedMode =
+    document.querySelector('input[name="retrieval_mode"]:checked')?.value || "vector";
+
+  fd.set("retrieval_mode", selectedMode);   
+  saveRetrievalMode(selectedMode); 
+
+  lastUploadFormData = fd;
+
+  // reset outputs
+  jobIdOut.textContent = "-";
+  collectionIdOut.textContent = "-";
+  errorOut.textContent = "";
+
+  await startJob(fd);
+});
+
+// Chat (stub endpoint; implement /query later)
+document.getElementById("chatForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const q = document.getElementById("chatInput").value.trim();
+  if (!q) return;
+
+  const userDiv = document.createElement("div");
+  userDiv.className = "chat-msg user";
+  userDiv.textContent = q;
+  chatLog.appendChild(userDiv);
+
+  document.getElementById("chatInput").value = "";
+
+  const col = activeCollection.textContent;
+  const activeMode = loadRetrievalMode();
+
+  // load history BEFORE this turn
+  const history = loadChatHistory();
+
+  const typingDiv = document.createElement("div");
+  typingDiv.className = "chat-msg bot typing-bubble";
+  typingDiv.innerHTML = `
+    <span class="typing-dot"></span>
+    <span class="typing-dot"></span>
+    <span class="typing-dot"></span>
+  `;
+  chatLog.appendChild(typingDiv);
+  chatLog.scrollTop = chatLog.scrollHeight;
+
+  const res = await fetch("/query", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      collection_id: col,
+      question: q,
+      retrieval_mode: activeMode,
+      chat_history: history,  // send history to backend
+    }),
+  });
+
+  typingDiv.remove();
+
+  const botDiv = document.createElement("div");
+  botDiv.className = "chat-msg bot";
+
+  let answerText = "";
+
+  if (!res.ok) {
+    botDiv.textContent = `Error (HTTP ${res.status})`;
+    answerText = `Error (HTTP ${res.status})`;
+  } else {
+    const data = await res.json();
+    answerText = (data.answer || "").trim() || "(no answer)";
+    const sources = Array.isArray(data.sources) ? data.sources : [];
+    const html = renderAnswerWithCitations(answerText, sources);
+    botDiv.innerHTML = html;
+  }
+
+  chatLog.appendChild(botDiv);
+  chatLog.scrollTop = chatLog.scrollHeight;
+
+  // save this turn to history
+  const updatedHistory = appendToHistory(history, q, answerText);
+  saveChatHistory(updatedHistory);
+});
+
+// side panel:
+
+async function fetchPanel(collectionId) {
+  const cid = encodeURIComponent((collectionId || "").trim());
+  const res = await fetch(`/collections/${cid}/panel`);
+  if (!res.ok) return null;
+  return await res.json();
+}
+
+function bytesToMB(n) {
+  if (!n || n <= 0) return "0 MB";
+  return (n / (1024 * 1024)).toFixed(2) + " MB";
+}
+
+
+
+function stopPanelPolling() {
+  if (panelPollTimer) {
+    clearInterval(panelPollTimer);
+    panelPollTimer = null;
+  }
+  panelPollCollectionId = null;
+}
+
+function startPanelPolling(collectionId) {
+  const panelEl = document.getElementById("side-panel");
+  if (!panelEl) return;
+
+  const cid = (collectionId || "").trim();
+  if (!cid || cid === "-") {
+    stopPanelPolling();
+    panelEl.innerHTML = `<div>No collection loaded. Upload documents to start.</div>`;
+    return;
+  }
+
+  // avoid creating multiple intervals for same collection
+  if (panelPollTimer && panelPollCollectionId === cid) return;
+
+  // switching collections: stop previous polling
+  stopPanelPolling();
+  panelPollCollectionId = cid;
+
+  async function tick() {
+    const data = await fetchPanel(cid);
+    if (!data) {
+      setEvalLinkVisibility(false);
+      panelEl.innerHTML = `<div>Panel endpoint not available yet (check /collections/${cid}/panel)</div>`;
+      return;
+    }
+
+    if (data.state === "no_collection") {
+      setEvalLinkVisibility(false);
+      panelEl.innerHTML = `<div>No collection loaded. Upload documents to start.</div>`;
+      return;
+    }
+
+    setEvalLinkVisibility(!!data.show_eval_link);
+
+    const mode = (data.processing?.retrieval_mode || "vector").toUpperCase();
+    const p = data.processing || {};
+    const e = data.embedding || {};
+    const i = data.index || {};
+    const g = data.graph || {};
+    const hy = data.hybrid || {};
+    const h = data.health || {};
+
+    const stage = (p.current_stage || "-").toString();
+    const status = (p.job_status || "-").toString();
+
+    const statusClass =
+      status === "done" || status === "ready" ? "ok" :
+      status === "running" || status === "processing" ? "run" :
+      status === "failed" ? "bad" : "";
+
+    const avoidance = (e.embedding_avoidance_rate_pct ?? "-");
+    const embedded = (e.chunks_embedded ?? "-");
+    const skipped = (e.chunks_skipped ?? "-");
+
+    const barPct = (typeof avoidance === "number")
+      ? Math.max(0, Math.min(100, avoidance))
+      : 0;
+
+    const isHybrid = mode === "HYBRID";
+
+    panelEl.innerHTML = `
+      <div class="sp-head">
+        <div class="sp-title">Workspace Metrics</div>
+        <div class="sp-pill ${statusClass}">
+          <span class="dot"></span>
+          <span>${status.toUpperCase()}</span>
+        </div>
+      </div>
+
+      <div class="sp-grid">
+
+        <div class="sp-card">
+          <div class="sp-card-h">
+            <div class="sp-card-title">Processing</div>
+            <div class="sp-mini">Stage</div>
+          </div>
+
+          <div class="sp-rows">
+            <div class="sp-row"><div class="sp-k">Stage</div><div class="sp-v">${stage}</div></div>
+            <div class="sp-row"><div class="sp-k">Mode</div><div class="sp-v">${mode}</div></div>
+            <div class="sp-row"><div class="sp-k">Total Docs</div><div class="sp-v">${p.total_docs ?? "-"}</div></div>
+          </div>
+        </div>
+
+        <div class="sp-card">
+          <div class="sp-card-h">
+            <div class="sp-card-title">Embedding</div>
+            <div class="sp-mini">Cache impact</div>
+          </div>
+
+          <div class="sp-rows">
+            <div class="sp-row"><div class="sp-k">Avoidance</div><div class="sp-v">${avoidance}%</div></div>
+            <div class="sp-bar"><span style="width:${barPct}%"></span></div>
+            <div class="sp-row"><div class="sp-k">SQLite Hits</div><div class="sp-v">${e.sqlite_hits ?? "-"}</div></div>
+            <div class="sp-row"><div class="sp-k">Embedded / Skipped</div><div class="sp-v">${embedded} / ${skipped}</div></div>
+            <div class="sp-row"><div class="sp-k">Wall Time</div><div class="sp-v">${e.rerun_wall_time_s ?? "-"} s</div></div>
+            <div class="sp-row"><div class="sp-k">Time Saved (est)</div><div class="sp-v">${e.embedding_time_saved_s_est ?? "-"} s</div></div>
+          </div>
+        </div>
+
+        <div class="sp-card">
+          <div class="sp-card-h">
+            <div class="sp-card-title">Index</div>
+            <div class="sp-mini">Vector store</div>
+          </div>
+
+          <div class="sp-rows">
+            <div class="sp-row"><div class="sp-k">Total Vectors</div><div class="sp-v">${i.total_vectors ?? "-"}</div></div>
+            <div class="sp-row"><div class="sp-k">Dim</div><div class="sp-v">${i.vector_dimension ?? "-"}</div></div>
+            <div class="sp-row"><div class="sp-k">Metric</div><div class="sp-v">${i.metric_type ?? "-"}</div></div>
+            <div class="sp-row"><div class="sp-k">Indexed Docs</div><div class="sp-v">${i.indexed_docs_count ?? "-"}</div></div>
+          </div>
+        </div>
+
+        ${isHybrid ? `
+        <div class="sp-card">
+          <div class="sp-card-h">
+            <div class="sp-card-title">Graph</div>
+            <div class="sp-mini">Neo4j build</div>
+          </div>
+
+          <div class="sp-rows">
+            <div class="sp-row"><div class="sp-k">Doc Nodes</div><div class="sp-v">${g.doc_nodes ?? "-"}</div></div>
+            <div class="sp-row"><div class="sp-k">Chunk Nodes</div><div class="sp-v">${g.chunk_nodes ?? "-"}</div></div>
+            <div class="sp-row"><div class="sp-k">Entity Nodes</div><div class="sp-v">${g.entity_nodes ?? "-"}</div></div>
+            <div class="sp-row"><div class="sp-k">NEXT Edges</div><div class="sp-v">${g.next_edges ?? "-"}</div></div>
+            <div class="sp-row"><div class="sp-k">Mentions</div><div class="sp-v">${g.mentions_edges ?? "-"}</div></div>
+            <div class="sp-row"><div class="sp-k">Relations</div><div class="sp-v">${g.relates_to_edges ?? "-"}</div></div>
+          </div>
+        </div>
+
+        <div class="sp-card">
+          <div class="sp-card-h">
+            <div class="sp-card-title">Hybrid</div>
+            <div class="sp-mini">Evaluation</div>
+          </div>
+
+          <div class="sp-rows">
+            <div class="sp-row"><div class="sp-k">Graph Contribution</div><div class="sp-v">${hy.graph_contribution_rate ?? "-"}</div></div>
+            <div class="sp-row"><div class="sp-k">Multi-hop Recall@10</div><div class="sp-v">${hy.multihop_recall_at_10 ?? "-"}</div></div>
+            <div class="sp-row"><div class="sp-k">Citation Precision</div><div class="sp-v">${hy.citation_precision ?? "-"}</div></div>
+            <div class="sp-row"><div class="sp-k">Unsupported Claim Rate</div><div class="sp-v">${hy.unsupported_claim_rate ?? "-"}</div></div>
+            <div class="sp-row"><div class="sp-k">Matched Queries</div><div class="sp-v">${hy.matched_queries ?? "-"}</div></div>
+          </div>
+        </div>
+        ` : ""}
+
+        <div class="sp-card">
+          <div class="sp-card-h">
+            <div class="sp-card-title">System</div>
+            <div class="sp-mini">Storage</div>
+          </div>
+
+          <div class="sp-rows">
+            <div class="sp-row"><div class="sp-k">Cache DB</div><div class="sp-v">${bytesToMB(h.cache_db_size_bytes)}</div></div>
+            <div class="sp-row"><div class="sp-k">Vector File</div><div class="sp-v">${bytesToMB(h.vector_file_size_bytes)}</div></div>
+            <div class="sp-row"><div class="sp-k">Total Storage</div><div class="sp-v">${bytesToMB(h.collection_storage_bytes)}</div></div>
+          </div>
+        </div>
+
+      </div>
+    `;
+  }
+
+  tick();
+  panelPollTimer = setInterval(tick, 2000);
+}
+
+
+/* =========================
+   THEME TOGGLE
+   ========================= */
+
+function applyTheme(theme){
+  if(theme === "dark"){
+    document.body.classList.add("dark-theme");
+    themeToggle.classList.add("active");
+  }else{
+    document.body.classList.remove("dark-theme");
+    themeToggle.classList.remove("active");
+  }
+}
+
+themeToggle.addEventListener("click", () => {
+  const current = localStorage.getItem("theme") || "light";
+  const next = current === "light" ? "dark" : "light";
+  localStorage.setItem("theme", next);
+  applyTheme(next);
+});
+
+/* load saved theme */
+
+applyTheme(localStorage.getItem("theme") || "light");

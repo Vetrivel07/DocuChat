@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DocuChat - Evaluation Dashboard</title>
+  <link rel="stylesheet" href="{{ request.url_for('static', path='css/eval_dashboard.css') }}">
+</head>
+<body>
+  <main class="wrap">
+    <header class="hero">
+      <h1>Evaluation Dashboard</h1>
+      <p id="subline">Latest offline evaluation output</p>
+    </header>
+
+    <section class="grid" id="cards"></section>
+
+    <section class="panel">
+      <h2>Run Details</h2>
+      <pre id="details">Loading...</pre>
+    </section>
+  </main>
+
+  <script src="{{ request.url_for('static', path='js/eval_dashboard.js') }}"></script>
+
+</body>
+</html>
+
