@@ -1,7 +1,7 @@
-# DocuChat — Hybrid Vector–Graph RAG System
+# DocuChat
 
 > Capstone Project  
-> **Hybrid Vector–Graph RAG with Evidence Grounding**
+> **Reducing Hallucination in Retrieval-Augmented Generation Using Hybrid Vector–Graph Integration with Evidence Grounding**
 
 A production-grade Retrieval-Augmented Generation system that combines dense vector search with knowledge graph retrieval to deliver evidence-grounded, citation-backed answers from document collections — with measurable hallucination control.
 
