@@ -1,7 +1,7 @@
     [project]
-    name = "rag2-1-s6-s8-v2"
+    name = "docuchat"
     version = "0.1.0"
-    description = "Add your description here"
+    description = "Hybrid Vector-Graph RAG system with evidence grounding and hallucination control"
     readme = "README.md"
     requires-python = ">=3.13"
     dependencies = [
@@ -20,5 +20,6 @@
         "python-docx>=1.2.0",
         "python-multipart>=0.0.22",
         "sentence-transformers>=5.2.2",
+        "starlette==0.46.2",
         "uvicorn>=0.40.0",
 ]

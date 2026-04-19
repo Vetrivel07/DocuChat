@@ -127,7 +127,7 @@ GRAPH_EMBEDDING_MODEL=model_name
 
 ### 5. Run the project
 ```bash
-python -m uvicorn src.main:app --host 0.0.0.0 --port 8080 --reload
+python -m uvicorn src.main:app --port 8080 --reload
 ```
 
 Open `http://127.0.0.1:8080` in your browser.
