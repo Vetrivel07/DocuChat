@@ -92,7 +92,7 @@ S_hybrid = 0.75 × S_vector + 0.25 × S_graph
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com/Vetrivel07/DocuChat.git
+git clone -b main https://github.com/Vetrivel07/DocuChat.git
 cd docuchat
 ```
 
