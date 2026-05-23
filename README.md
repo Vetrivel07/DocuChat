@@ -5,9 +5,9 @@
 
 A production-grade Retrieval-Augmented Generation system that combines dense vector search with knowledge graph retrieval to deliver evidence-grounded, citation-backed answers from document collections — with measurable hallucination control.
 
-📹 Demo Videos: [Vector & Hybrid Pipeline Demos](/DocuChat/documents/demo_video/demo.mp4)
+📹 Demo Videos: [Vector & Hybrid Pipeline Demos](/documents/demo_video/demo.mp4)
 
-📄 Project Paper: [Capstone Paper](/DocuChat/documents/paper/Maheswaran_Vetrivel_Capstone_Report.pdf)
+📄 Project Paper: [Capstone Paper](/documents/paper/Maheswaran_Vetrivel_Capstone_Report.pdf)
 
 ---
 
